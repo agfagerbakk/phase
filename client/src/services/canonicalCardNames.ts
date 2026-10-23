@@ -46,6 +46,7 @@ export function deckCardNames(deck: ParsedDeck): string[] {
 
 const SET_ONLY_PRINTING_SUFFIX_RE = /^(.*\S)\s+\(([a-z0-9]+|[A-Z0-9]+)\)$/;
 
+/** The base of `name` when it ends in a lowercase or uppercase set-only suffix. */
 function baseNameWithoutSetOnlySuffix(name: string): string | null {
   const match = name.match(SET_ONLY_PRINTING_SUFFIX_RE);
   return match ? match[1] : null;
