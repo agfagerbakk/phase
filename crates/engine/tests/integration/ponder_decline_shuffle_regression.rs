@@ -158,3 +158,75 @@ fn ponder_accept_shuffle_draws_exactly_once() {
         "accepting the optional shuffle must shuffle the library",
     );
 }
+
+/// The two tests above read Ponder from the committed integration fixture, so a
+/// parser regression would hide behind a stale snapshot. This one parses
+/// Ponder's verbatim Oracle text with the current parser and drives it through
+/// the same production entry points: the "You may shuffle." sentence must
+/// surface as an `OptionalEffectChoice`, and declining it must not shuffle.
+#[test]
+fn ponder_fresh_parse_prompts_for_optional_shuffle() {
+    const PONDER: &str = "Look at the top three cards of your library, then put them back in any order. You may shuffle.\nDraw a card.";
+    let Some(db) = load_db() else {
+        return;
+    };
+    let mut scenario = GameScenario::new();
+    scenario.at_phase(Phase::PreCombatMain);
+    let ponder = scenario
+        .add_spell_to_hand_from_oracle(P0, "Ponder", false, PONDER)
+        .with_mana_cost(engine::types::mana::ManaCost::zero())
+        .id();
+    for name in ["Forest", "Island", "Mountain", "Plains"] {
+        scenario.add_real_card(P0, name, Zone::Library, db);
+    }
+    let mut runner = scenario.build();
+
+    let card_id = runner.state().objects[&ponder].card_id;
+    runner
+        .act(GameAction::CastSpell {
+            object_id: ponder,
+            card_id,
+            targets: vec![],
+            payment_mode: CastPaymentMode::Auto,
+        })
+        .expect("Ponder cast should succeed");
+    runner.advance_until_stack_empty();
+
+    let kept = match &runner.state().waiting_for {
+        WaitingFor::DigChoice { cards, .. } => cards.clone(),
+        other => panic!("expected DigChoice after Ponder resolves, got {other:?}"),
+    };
+    let ordered_top = kept.clone();
+    let result = runner
+        .act(GameAction::SelectCards { cards: kept })
+        .expect("answering Ponder's DigChoice should advance");
+    assert!(
+        matches!(
+            runner.state().waiting_for,
+            WaitingFor::OptionalEffectChoice { .. }
+        ),
+        "freshly parsed Ponder must prompt for the optional shuffle, got {:?}",
+        runner.state().waiting_for,
+    );
+    assert!(
+        !result.events.iter().any(|e| matches!(
+            e,
+            GameEvent::EffectResolved {
+                kind: EffectKind::Shuffle,
+                ..
+            }
+        )),
+        "the library must not be shuffled before the player answers the prompt",
+    );
+
+    runner
+        .act(GameAction::DecideOptionalEffect { accept: false })
+        .expect("declining the shuffle should resolve");
+    // Declined: the top of the library is the chosen order minus the one drawn card.
+    let hand = &runner.state().players[P0.0 as usize].hand;
+    assert_eq!(hand.len(), 1, "declining the shuffle still draws a card");
+    assert!(
+        ordered_top.contains(&hand.iter().next().expect("one card in hand")),
+        "the drawn card must be one of the three cards put back on top",
+    );
+}
