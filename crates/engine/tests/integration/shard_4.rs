@@ -537,6 +537,7 @@ mod perpetual_last_created_empty_no_source_fallback;
 mod perpetual_modify_pt_historical_restore;
 mod perpetual_trigger_subject_binding;
 mod peter_parker_modal_back_face_cast;
+mod peter_parkers_camera_reuse;
 mod phantom_general_token_anthem;
 mod phased_out_attachment_predicates;
 mod phased_out_permanent_gains_no_control;
